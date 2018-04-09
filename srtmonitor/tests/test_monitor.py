@@ -3,6 +3,7 @@ import shutil
 import subprocess as sp
 import multiprocessing
 import time
+import glob
 from ..monitor import main
 
 
@@ -42,7 +43,7 @@ class TestMonitor(object):
 
     def test_all(self):
         def process():
-            main([self.datadir, '--test'])
+            main([self.curdir, '--test'])
 
         w = multiprocessing.Process(name='worker', target=process)
         w.start()
@@ -51,10 +52,12 @@ class TestMonitor(object):
         sp.check_call('cp {} {}'.format(self.file_empty_init,
                                         self.file_empty).split())
 
-        time.sleep(5)
+        time.sleep(10)
 
         assert os.path.exists(self.file_empty_pdf0)
         assert os.path.exists(self.file_empty_pdf1)
+        assert os.path.exists('latest_0.pdf')
+        assert os.path.exists('latest_1.pdf')
         w.terminate()
 
     @classmethod
@@ -67,3 +70,5 @@ class TestMonitor(object):
             os.unlink(klass.file_empty_pdf0)
         if os.path.exists(klass.file_empty_pdf1):
             os.unlink(klass.file_empty_pdf1)
+        for file in glob.glob('latest*.pdf'):
+            os.unlink(file)

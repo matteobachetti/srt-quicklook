@@ -7,12 +7,14 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import warnings
 import subprocess as sp
+import glob
+import os
 warnings.filterwarnings('ignore')
 global CONFIG_FILE
 
 
 class MyHandler(PatternMatchingEventHandler):
-    patterns = ["*.fits"]
+    patterns = ["*/*.fits"]
     def process(self, event):
         """
         event.event_type
@@ -23,10 +25,14 @@ class MyHandler(PatternMatchingEventHandler):
             path/to/observed/file
         """
         global CONFIG_FILE
-        print(event)
         infile = event.src_path
+        root = infile.replace('.fits', '')
         sp.check_call(
             "SDTpreprocess --debug {}".format(infile).split())
+
+        for pdffile in glob.glob(root + '*.pdf'):
+            newfile = pdffile.replace(root, 'latest')
+            sp.check_call('cp {} {}'.format(pdffile, newfile).split())
 
     def on_created(self, event):
         self.process(event)
