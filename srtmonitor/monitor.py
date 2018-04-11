@@ -8,9 +8,22 @@ from watchdog.events import PatternMatchingEventHandler
 import warnings
 import subprocess as sp
 import glob
-import os
+from srttools.read_config import read_config
 warnings.filterwarnings('ignore')
 global CONFIG_FILE
+
+
+def create_dummy_config():
+    config_str = """
+    [local]
+    [analysis]
+    [debugging]
+    debug_file_format : jpg
+    """
+    with open('monitor_config.ini', 'w') as fobj:
+        print(config_str, file=fobj)
+
+    return 'monitor_config.ini'
 
 
 class MyHandler(PatternMatchingEventHandler):
@@ -25,14 +38,18 @@ class MyHandler(PatternMatchingEventHandler):
             path/to/observed/file
         """
         global CONFIG_FILE
+
         infile = event.src_path
         root = infile.replace('.fits', '')
+        conf = read_config(CONFIG_FILE)
+        ext = conf['debug_file_format']
         sp.check_call(
-            "SDTpreprocess --debug {}".format(infile).split())
+            "SDTpreprocess --debug {} -c {}".format(infile,
+                                                    CONFIG_FILE).split())
 
-        for pdffile in glob.glob(root + '*.pdf'):
-            newfile = pdffile.replace(root, 'latest')
-            sp.check_call('cp {} {}'.format(pdffile, newfile).split())
+        for debugfile in glob.glob(root + '*.{}'.format(ext)):
+            newfile = debugfile.replace(root, 'latest')
+            sp.check_call('cp {} {}'.format(debugfile, newfile).split())
 
     def on_created(self, event):
         self.process(event)
@@ -51,7 +68,7 @@ def main(args=None):
     parser.add_argument("directory",
                         help="Directory to monitor",
                         default=None, type=str)
-    parser.add_argument("--config",
+    parser.add_argument("-c", "--config",
                         help="Config file",
                         default=None, type=str)
     parser.add_argument("--test",
@@ -63,7 +80,11 @@ def main(args=None):
                         format='%(asctime)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
     path = args.directory
-    CONFIG_FILE = args.config
+
+    if args.config is None:
+        CONFIG_FILE = create_dummy_config()
+    else:
+        CONFIG_FILE = args.config
 
     event_handler = MyHandler()
     observer = Observer()
@@ -75,6 +96,7 @@ def main(args=None):
             time.sleep(1)
             if args.test:
                 count += 1
+        raise KeyboardInterrupt
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        pass
+    observer.stop()
