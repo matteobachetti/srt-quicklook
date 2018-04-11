@@ -8,9 +8,18 @@ from watchdog.events import PatternMatchingEventHandler
 import warnings
 import subprocess as sp
 import glob
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
 from srttools.read_config import read_config
 warnings.filterwarnings('ignore')
 global CONFIG_FILE
+
+
+def run_webserver(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler):
+    server_address = ('', 8000)
+    httpd = server_class(server_address, handler_class)
+    httpd.serve_forever()
+    return httpd
 
 
 def create_dummy_config():
@@ -43,13 +52,29 @@ class MyHandler(PatternMatchingEventHandler):
         root = infile.replace('.fits', '')
         conf = read_config(CONFIG_FILE)
         ext = conf['debug_file_format']
-        sp.check_call(
-            "SDTpreprocess --debug {} -c {}".format(infile,
-                                                    CONFIG_FILE).split())
+        try:
+            sp.check_call(
+                "SDTpreprocess --debug {} -c {}".format(infile,
+                                                        CONFIG_FILE).split())
+        except sp.CalledProcessError:
+            return
 
         for debugfile in glob.glob(root + '*.{}'.format(ext)):
             newfile = debugfile.replace(root, 'latest')
             sp.check_call('cp {} {}'.format(debugfile, newfile).split())
+
+        with open('index.html', "w") as fobj:
+            print('<META HTTP-EQUIV="refresh" CONTENT="5">', file=fobj)
+            allfiles = glob.glob('latest*.{}'.format(ext))
+            N = len(allfiles)
+            if N <= 2:
+                width = "50%"
+            else:
+                width = "25%"
+            for i, fname in enumerate(sorted(allfiles)):
+                print("<div style=\"width:{}; float:left;\" />".format(width), file=fobj)
+                print("<img src=\"{}\" width=\"100%\"/>".format(fname), file=fobj)
+                print("</div>", file=fobj)
 
     def on_created(self, event):
         self.process(event)
@@ -79,6 +104,10 @@ def main(args=None):
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
+
+    with open('index.html', "w") as fobj:
+        print('<META HTTP-EQUIV="refresh" CONTENT="5">', file=fobj)
+        print("Waiting for the first observation...", file=fobj)
     path = args.directory
 
     if args.config is None:
@@ -100,3 +129,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     observer.stop()
+
+
+if __name__ == '__main__':  # pragma: no cover
+    main(sys.argv[1:])
